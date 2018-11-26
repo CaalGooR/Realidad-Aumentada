@@ -9,10 +9,15 @@
 import UIKit
 import SceneKit
 import ARKit
+import ReplayKit
 
 class ViewController: UIViewController, ARSCNViewDelegate {
 
     @IBOutlet var sceneView: ARSCNView!
+    let  recorder = RPScreenRecorder.shared()
+    
+    @IBOutlet weak var stopButton: UIButton!
+    @IBOutlet weak var recordButton: UIButton!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -28,7 +33,36 @@ class ViewController: UIViewController, ARSCNViewDelegate {
         
         // Set the scene to the view
         sceneView.scene = scene
+        
+        let tapGesture = UITapGestureRecognizer(target: self, action:
+            #selector(ViewController.handleTap(gestureRecognizer:)))
+        view.addGestureRecognizer(tapGesture)
+        
+        stopButton.isEnabled = false
     }
+    
+    @objc
+    func handleTap (gestureRecognizer: UITapGestureRecognizer)
+    {
+        guard let currentFrame = sceneView.session.currentFrame else {
+            return
+        }
+        
+        let imagePlane = SCNPlane(width: sceneView.bounds.width/6000,
+                                  height: sceneView.bounds.height/6000)
+        imagePlane.firstMaterial?.diffuse.contents = sceneView.snapshot()
+        imagePlane.firstMaterial?.lightingModel = .constant
+        
+        let planeNode = SCNNode(geometry: imagePlane)
+        sceneView.scene.rootNode.addChildNode(planeNode)
+        
+        var translation = matrix_identity_float4x4
+        translation.columns.3.z = -0.1
+        planeNode.simdTransform = matrix_multiply(currentFrame.camera.transform, translation)
+        
+    }
+    
+    
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
@@ -76,5 +110,34 @@ class ViewController: UIViewController, ARSCNViewDelegate {
     func sessionInterruptionEnded(_ session: ARSession) {
         // Reset tracking and/or remove existing anchors if consistent tracking is required
         
+    }
+    
+    // MARK ACTIONS
+    
+    
+    @IBAction func startRecording(_ sender: UIButton) {
+        recordButton.isEnabled = false
+        stopButton.isEnabled = true
+        recorder.startRecording(withMicrophoneEnabled: true){(error) in
+            if let error = error {
+                print(error)
+            }
+        }
+    }
+    
+    @IBAction func stopRecording(_ sender: UIButton) {
+        recorder.stopRecording
+        {
+            (previewVC, error) in
+            if let previewVC = previewVC {
+                previewVC.previewControllerDelegate = self as? RPPreviewViewControllerDelegate
+                self.present(previewVC, animated: true, completion: nil)
+            }
+            
+            if let error = error{
+                print(error)
+            }
+        }
+        stopButton.isEnabled = false
     }
 }
